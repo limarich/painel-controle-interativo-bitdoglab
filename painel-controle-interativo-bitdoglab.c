@@ -3,9 +3,14 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
-#include "hardware/i2c.h"
 
-#include "lib/ssd1306.h" // Biblioteca para o display OLED
+#include "hardware/i2c.h"
+#include "hardware/pio.h"
+#include "hardware/clocks.h"
+
+#include "pio_matrix.pio.h" // Arquivo PIO para controle da matriz de LEDs
+#include "lib/ssd1306.h"    // Biblioteca para o display OLED
+#include "lib/leds.h"       // Biblioteca para os LEDs
 
 #define MAX_USUARIOS 25    // Capacidade máxima de usuários
 #define BUTTON_A 5         // BOTÃO A
@@ -26,6 +31,9 @@ ssd1306_t ssd; // Variável para o display
 
 volatile uint usuarios_ativos = 0;              // Contador de usuários ativos
 static absolute_time_t last_interrupt_time = 0; // Variável para armazenar o tempo da última interrupção
+
+PIO pio;
+uint sm;
 
 // Tarefa: Entrada de usuário (botão A)
 void vTaskAdicionaUsuario(void *pvParameters)
@@ -54,6 +62,9 @@ void vTaskAdicionaUsuario(void *pvParameters)
                     ssd1306_draw_string(&ssd, buffer, 0, 0);
                     ssd1306_send_data(&ssd);
                     xSemaphoreGive(xMutexDisplay);
+
+                    // Aciona a animação de chegada do usuário
+                    user_arrival_animation(pio, sm, usuarios_ativos + 1);
                 }
             }
             else
@@ -96,6 +107,9 @@ void vTaskRemoveUsuario(void *pvParameters)
                     // display atualizado
                     printf("Display atualizado com %d usuários\n", usuarios_ativos);
                     xSemaphoreGive(xMutexDisplay);
+
+                    // Aciona a animação de saída do usuário
+                    user_exit_animation(pio, sm, usuarios_ativos);
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_TIME)); // debounce
@@ -138,7 +152,9 @@ void vTaskReset(void *pvParameters)
         if (xSemaphoreTake(xSemaforoReset, portMAX_DELAY) == pdTRUE)
         {
             printf("Resetando contagem de usuários\n");
+            uint usuarios_ativos_antes = usuarios_ativos;
             usuarios_ativos = 0;
+            reset_animation(pio, sm, usuarios_ativos_antes); // Aciona a animação de reset
 
             for (int i = 0; i < MAX_USUARIOS; i++)
             {
@@ -197,6 +213,15 @@ void setup_i2c()
     ssd1306_send_data(&ssd);
 }
 
+void PIO_setup()
+{
+    // configurações da PIO
+    pio = pio0;
+    uint offset = pio_add_program(pio, &pio_matrix_program);
+    sm = pio_claim_unused_sm(pio, true);
+    pio_matrix_program_init(pio, sm, offset, LED_PIN);
+}
+
 int main()
 {
     stdio_init_all();
@@ -217,6 +242,8 @@ int main()
     xMutexDisplay = xSemaphoreCreateMutex();
     // Configuração do I2C
     setup_i2c();
+    // Configuração da PIO
+    PIO_setup();
 
     xTaskCreate(vTaskAdicionaUsuario, "Adiciona Usuario", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
     xTaskCreate(vTaskRemoveUsuario, "Remove Usuario", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
