@@ -27,6 +27,10 @@
 #define I2C_SCL 15    // PINO DO SCL
 #define endereco 0x3C // ENDEREÇO
 
+#define LED_RED 13   // pino do led vermelho
+#define LED_BLUE 12  // pino do led azul
+#define LED_GREEN 11 // pino do led verde
+
 SemaphoreHandle_t xSemaforoReset;    // Semáforo para reset
 SemaphoreHandle_t xSemaforoUsuarios; // Semáforo para controle de usuários
 SemaphoreHandle_t xMutexDisplay;     // Mutex para controle do display
@@ -190,6 +194,46 @@ void vTaskReset(void *pvParameters)
     }
 }
 
+// Tarefa: Atualiza os LEDs RGB
+// Atualiza os LEDs RGB de acordo com o número de usuários ativos
+// Se não houver usuários ativos, acende o LED azul
+// Se houver usuários ativos, acende o LED verde
+// Se houver usuários ativos e o número for menor que a capacidade máxima - 1, acende o LED vermelho
+// Se houver usuários ativos e o número for igual a capacidade máxima, acende o LED vermelho
+// Se houver usuários ativos e o número for maior que a capacidade máxima, acende o LED vermelho
+void vTaskLed(void *pvParameters)
+{
+    while (1)
+    {
+        if (usuarios_ativos == 0)
+        {
+
+            gpio_put(LED_GREEN, 0);
+            gpio_put(LED_RED, 0);
+            gpio_put(LED_BLUE, 1);
+        }
+        else if (usuarios_ativos <= MAX_USUARIOS - 2)
+        {
+            gpio_put(LED_GREEN, 1);
+            gpio_put(LED_RED, 0);
+            gpio_put(LED_BLUE, 0);
+        }
+        else if (usuarios_ativos <= MAX_USUARIOS - 1)
+        {
+            gpio_put(LED_GREEN, 1);
+            gpio_put(LED_RED, 1);
+            gpio_put(LED_BLUE, 0);
+        }
+        else
+        {
+            gpio_put(LED_GREEN, 0);
+            gpio_put(LED_RED, 1);
+            gpio_put(LED_BLUE, 0);
+        }
+        vTaskDelay(pdMS_TO_TICKS(100)); // Aguarda 100ms
+    }
+}
+
 // Tarefa: Atualiza o display a cada 500ms
 // Atualiza o display com o número de usuários ativos
 // Se o semáforo de controle do display estiver disponível, atualiza o display
@@ -252,8 +296,22 @@ void PIO_setup()
     pio_matrix_program_init(pio, sm, offset, LED_PIN);
 }
 
+void init_leds()
+{
+    // Inicializa os pinos do LED RGB
+    gpio_init(LED_RED);
+    gpio_init(LED_GREEN);
+    gpio_init(LED_BLUE);
+
+    // Define os pinos como saída
+    gpio_set_dir(LED_RED, GPIO_OUT);
+    gpio_set_dir(LED_GREEN, GPIO_OUT);
+    gpio_set_dir(LED_BLUE, GPIO_OUT);
+}
+
 int main()
 {
+
     stdio_init_all();
     // Inicializa os buzzers
     initialization_buzzers(BUZZER_A, BUZZER_B);
@@ -268,6 +326,9 @@ int main()
         GPIO_IRQ_EDGE_FALL,
         true,
         &gpio_irq_handler);
+    // Configuração dos LEDs
+    init_leds();
+
     // Criação do semáforo binário para controle de usuários
     xSemaforoUsuarios = xSemaphoreCreateCounting(MAX_USUARIOS, MAX_USUARIOS); // inicia a contagem com o máximo de usuários(25)
     xSemaforoReset = xSemaphoreCreateBinary();
@@ -282,6 +343,7 @@ int main()
     xTaskCreate(vTaskRemoveUsuario, "Remove Usuario", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
     xTaskCreate(vTaskReset, "ResetTask", configMINIMAL_STACK_SIZE + 128, NULL, 2, NULL);
     xTaskCreate(vTaskDisplay, "Atualiza monitor", configMINIMAL_STACK_SIZE + 128, NULL, 2, NULL);
+    xTaskCreate(vTaskLed, "Atualiza o led", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
 
     // Início do escalonador
     vTaskStartScheduler();
