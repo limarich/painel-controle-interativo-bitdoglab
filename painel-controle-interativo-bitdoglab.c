@@ -11,12 +11,16 @@
 #include "pio_matrix.pio.h" // Arquivo PIO para controle da matriz de LEDs
 #include "lib/ssd1306.h"    // Biblioteca para o display OLED
 #include "lib/leds.h"       // Biblioteca para os LEDs
+#include "lib/buzzer.h"     // Biblioteca para o buzzer
 
-#define MAX_USUARIOS 25    // Capacidade máxima de usuários
-#define BUTTON_A 5         // BOTÃO A
-#define BUTTON_B 6         // BOTÃO B
-#define BUTTON_JOYSTICK 22 // BOTÃO JOYSTICK
-#define DEBOUNCE_TIME 300  // tempo de debounce em ms
+#define MAX_USUARIOS 25       // Capacidade máxima de usuários
+#define BUTTON_A 5            // BOTÃO A
+#define BUTTON_B 6            // BOTÃO B
+#define BUTTON_JOYSTICK 22    // BOTÃO JOYSTICK
+#define DEBOUNCE_TIME 300     // tempo de debounce em ms
+#define BUZZER_FREQUENCY 1000 // FREQUENCIA DO BUZZER
+#define BUZZER_A 10           // PORTA DO BUZZER A
+#define BUZZER_B 21           // PORTA DO BUZZER B
 
 #define I2C_PORT i2c1 // PORTA DO i2C
 #define I2C_SDA 14    // PINO DO SDA
@@ -54,12 +58,17 @@ void vTaskAdicionaUsuario(void *pvParameters)
                 usuarios_ativos = usuarios_ativos + 1;
                 printf("Entrou! Agora há %d usuários\n", usuarios_ativos);
 
+                UBaseType_t uxCount;
+                uxCount = uxSemaphoreGetCount(xSemaforoUsuarios); // Obtém quantos tokens estão disponíveis agora
+
                 if (xSemaphoreTake(xMutexDisplay, pdMS_TO_TICKS(100)) == pdTRUE)
                 {
                     char buffer[20];
                     snprintf(buffer, sizeof(buffer), "Usuarios: %d", usuarios_ativos);
                     ssd1306_fill(&ssd, false);
                     ssd1306_draw_string(&ssd, buffer, 0, 0);
+                    sniprintf(buffer, sizeof(buffer), "Vagas: %d", uxCount);
+                    ssd1306_draw_string(&ssd, buffer, 0, 18);
                     ssd1306_send_data(&ssd);
                     xSemaphoreGive(xMutexDisplay);
 
@@ -70,6 +79,8 @@ void vTaskAdicionaUsuario(void *pvParameters)
             else
             {
                 printf("Capacidade máxima atingida!\n");
+                // beep curto para indicar que a capacidade máxima foi atingida
+                buzzer_pwm(BUZZER_A, BUZZER_FREQUENCY, 100); // Ativa o Buzzer A por 100ms
             }
 
             vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_TIME)); // debounce
@@ -96,6 +107,8 @@ void vTaskRemoveUsuario(void *pvParameters)
                 usuarios_ativos--;
                 xSemaphoreGive(xSemaforoUsuarios);
                 printf("Saiu! Agora há %d usuários\n", usuarios_ativos);
+                UBaseType_t uxCount;
+                uxCount = uxSemaphoreGetCount(xSemaforoUsuarios); // Obtém quantos tokens estão disponíveis agora
 
                 if (xSemaphoreTake(xMutexDisplay, pdMS_TO_TICKS(100)) == pdTRUE)
                 {
@@ -103,6 +116,8 @@ void vTaskRemoveUsuario(void *pvParameters)
                     snprintf(buffer, sizeof(buffer), "Usuarios: %d", usuarios_ativos);
                     ssd1306_fill(&ssd, false);
                     ssd1306_draw_string(&ssd, buffer, 0, 0);
+                    sniprintf(buffer, sizeof(buffer), "Vagas: %d", uxCount);
+                    ssd1306_draw_string(&ssd, buffer, 0, 18);
                     ssd1306_send_data(&ssd);
                     // display atualizado
                     printf("Display atualizado com %d usuários\n", usuarios_ativos);
@@ -143,6 +158,16 @@ void gpio_irq_handler(uint gpio, uint32_t events)
     }
 }
 
+void reset_feedback(uint usuarios_ativos_antes)
+{
+    reset_animation(pio, sm, usuarios_ativos_antes); // Aciona a animação de reset
+    // beep duplo para indicar o reset
+    buzzer_pwm(BUZZER_A, BUZZER_FREQUENCY, 100); // Ativa o Buzzer A por 100ms
+    vTaskDelay(pdMS_TO_TICKS(50));               // Aguarda 50ms
+    buzzer_pwm(BUZZER_B, BUZZER_FREQUENCY, 100); // Ativa o Buzzer B por 100ms
+    vTaskDelay(pdMS_TO_TICKS(50));
+}
+
 // Tarefa: reset da contagem via semáforo
 // Reseta o contador de usuários e libera os semáforos de controle de usuários
 void vTaskReset(void *pvParameters)
@@ -150,16 +175,17 @@ void vTaskReset(void *pvParameters)
     while (1)
     {
         if (xSemaphoreTake(xSemaforoReset, portMAX_DELAY) == pdTRUE)
-        {
             printf("Resetando contagem de usuários\n");
-            uint usuarios_ativos_antes = usuarios_ativos;
-            usuarios_ativos = 0;
-            reset_animation(pio, sm, usuarios_ativos_antes); // Aciona a animação de reset
+        uint usuarios_ativos_antes = usuarios_ativos;
+        {
 
-            for (int i = 0; i < MAX_USUARIOS; i++)
+            for (int i = 0; i < usuarios_ativos_antes; i++)
             {
                 xSemaphoreGive(xSemaforoUsuarios);
             }
+
+            usuarios_ativos = 0;                   // Reseta o contador de usuários
+            reset_feedback(usuarios_ativos_antes); // Aciona o feedback de reset
         }
     }
 }
@@ -173,10 +199,14 @@ void vTaskDisplay(void *pvParameters)
     {
         if (xSemaphoreTake(xMutexDisplay, pdMS_TO_TICKS(100)) == pdTRUE)
         {
+            UBaseType_t uxCount;
+            uxCount = uxSemaphoreGetCount(xSemaforoUsuarios); // Obtém quantos tokens estão disponíveis agora
             char buffer[20];
             snprintf(buffer, sizeof(buffer), "Usuarios: %d", usuarios_ativos);
             ssd1306_fill(&ssd, false);
             ssd1306_draw_string(&ssd, buffer, 0, 0);
+            sniprintf(buffer, sizeof(buffer), "Vagas: %d", uxCount);
+            ssd1306_draw_string(&ssd, buffer, 0, 18);
             ssd1306_send_data(&ssd);
             xSemaphoreGive(xMutexDisplay);
         }
@@ -225,6 +255,8 @@ void PIO_setup()
 int main()
 {
     stdio_init_all();
+    // Inicializa os buzzers
+    initialization_buzzers(BUZZER_A, BUZZER_B);
 
     // Configuração dos pinos
     setup_gpio_button(BUTTON_A);
@@ -237,9 +269,10 @@ int main()
         true,
         &gpio_irq_handler);
     // Criação do semáforo binário para controle de usuários
-    xSemaforoUsuarios = xSemaphoreCreateCounting(MAX_USUARIOS, MAX_USUARIOS);
+    xSemaforoUsuarios = xSemaphoreCreateCounting(MAX_USUARIOS, MAX_USUARIOS); // inicia a contagem com o máximo de usuários(25)
     xSemaforoReset = xSemaphoreCreateBinary();
     xMutexDisplay = xSemaphoreCreateMutex();
+
     // Configuração do I2C
     setup_i2c();
     // Configuração da PIO
