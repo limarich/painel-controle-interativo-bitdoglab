@@ -170,19 +170,10 @@ void reset_animation(PIO pio, uint sm, uint user_count)
     // Inicializa todos os LEDs como se estivessem ocupados
     for (int16_t i = 0; i < PIXELS; i++)
     {
-        if (i >= PIXELS - user_count)
-            frame[i] = red; // usuários ativos
-        else
-            frame[i] = black;
+        frame[i] = black;
     }
 
-    // Anima apagando apenas os LEDs dos usuários
-    for (int16_t i = PIXELS - 1; i >= (PIXELS - user_count); i--)
-    {
-        frame[i] = black;
-        draw_pio(frame, pio, sm);
-        sleep_ms(50);
-    }
+    draw_pio(frame, pio, sm);
 
     sleep_ms(50); // pequeno delay final
 }
