@@ -54,9 +54,9 @@ void draw_pio(pixel *draw, PIO pio, uint sm);
 void test_matrix(PIO pio, uint sm);
 
 // animacao de chegada do usuario
-void user_arrival_animation(PIO pio, uint sm, uint user_count);
+void user_arrival_animation(PIO pio, uint sm, uint user_count, color_options color);
 // animacao de saida do usuario
-void user_exit_animation(PIO pio, uint sm, uint user_count);
+void user_exit_animation(PIO pio, uint sm, uint user_count, color_options color);
 // animacao de reset
 void reset_animation(PIO pio, uint sm, uint user_count);
 

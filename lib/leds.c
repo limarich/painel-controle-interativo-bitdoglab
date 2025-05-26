@@ -110,15 +110,15 @@ pixel handle_color(color_options color, float intensity)
     return pixel_color;
 }
 
-void user_arrival_animation(PIO pio, uint sm, uint user_count)
+void user_arrival_animation(PIO pio, uint sm, uint user_count, color_options color)
 {
-    pixel red = {255, 0, 0, 0.1}, black = {0, 0, 0, 1};
+    pixel black = {0, 0, 0, 1}, current_color = handle_color(color, 0.1);
     pixel frame[PIXELS];
     for (int16_t i = 0; i < PIXELS; i++)
     {
         if (i > PIXELS - user_count + 1)
         {
-            frame[i] = red;
+            frame[i] = current_color;
         }
         else
         {
@@ -127,22 +127,22 @@ void user_arrival_animation(PIO pio, uint sm, uint user_count)
     }
     for (int16_t i = 0; i < PIXELS - user_count + 2; i++)
     {
-        frame[i] = red;
+        frame[i] = current_color;
         draw_pio(frame, pio, sm);
         sleep_ms(50);
         frame[i] = black;
     }
 }
 
-void user_exit_animation(PIO pio, uint sm, uint user_count)
+void user_exit_animation(PIO pio, uint sm, uint user_count, color_options color)
 {
-    pixel red = {255, 0, 0, 0.1}, black = {0, 0, 0, 1};
+    pixel black = {0, 0, 0, 1}, current_color = handle_color(color, 0.1);
     pixel frame[PIXELS];
     for (int16_t i = 0; i < PIXELS; i++)
     {
         if (i > PIXELS - user_count - 1) // usuários que ainda estão no sistema
         {
-            frame[i] = red;
+            frame[i] = current_color;
         }
         else
         {
@@ -151,7 +151,7 @@ void user_exit_animation(PIO pio, uint sm, uint user_count)
     }
     for (int16_t i = PIXELS - user_count - 1 - 1; i >= 0; i--)
     {
-        frame[i] = red;
+        frame[i] = current_color;
         draw_pio(frame, pio, sm);
         sleep_ms(50);
         frame[i] = black;
@@ -163,7 +163,6 @@ void user_exit_animation(PIO pio, uint sm, uint user_count)
 
 void reset_animation(PIO pio, uint sm, uint user_count)
 {
-    pixel red = {255, 0, 0, 0.1};
     pixel black = {0, 0, 0, 1};
     pixel frame[PIXELS];
 

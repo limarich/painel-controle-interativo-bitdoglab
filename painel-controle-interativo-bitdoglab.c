@@ -76,8 +76,19 @@ void vTaskAdicionaUsuario(void *pvParameters)
                     ssd1306_send_data(&ssd);
                     xSemaphoreGive(xMutexDisplay);
 
+                    // decide a cor baseado na quantidade de usuários
+                    color_options color = GREEN;
+                    if (usuarios_ativos == MAX_USUARIOS - 1)
+                    {
+                        color = YELLOW; // Se a quantidade de usuários for maior ou igual a capacidade máxima - 1, usa amarelo
+                    }
+                    else if (usuarios_ativos == MAX_USUARIOS)
+                    {
+                        color = RED; // Se a quantidade de usuários for igual a capacidade máxima, usa vermelho
+                    }
+
                     // Aciona a animação de chegada do usuário
-                    user_arrival_animation(pio, sm, usuarios_ativos + 1);
+                    user_arrival_animation(pio, sm, usuarios_ativos + 1, color);
                 }
             }
             else
@@ -139,8 +150,15 @@ void vTaskRemoveUsuario(void *pvParameters)
                     printf("Display atualizado com %d usuários\n", usuarios_ativos);
                     xSemaphoreGive(xMutexDisplay);
 
+                    // decide a cor baseado na quantidade de usuários
+                    color_options color = GREEN;
+                    if (usuarios_ativos >= MAX_USUARIOS - 1)
+                    {
+                        color = YELLOW; // Se a quantidade de usuários for maior ou igual a capacidade máxima - 1, usa amarelo
+                    }
+
                     // Aciona a animação de saída do usuário
-                    user_exit_animation(pio, sm, usuarios_ativos);
+                    user_exit_animation(pio, sm, usuarios_ativos, color);
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_TIME)); // debounce
