@@ -83,8 +83,20 @@ void vTaskAdicionaUsuario(void *pvParameters)
             else
             {
                 printf("Capacidade máxima atingida!\n");
+
+                // Mostra mensagem de aviso no display
+                if (xSemaphoreTake(xMutexDisplay, pdMS_TO_TICKS(100)) == pdTRUE)
+                {
+                    ssd1306_fill(&ssd, false);
+                    ssd1306_draw_string(&ssd, "Sem vagas", 0, 0);
+                    ssd1306_draw_string(&ssd, "Cap. max atingida", 0, 18);
+                    ssd1306_send_data(&ssd);
+                    xSemaphoreGive(xMutexDisplay);
+                }
+
                 // beep curto para indicar que a capacidade máxima foi atingida
                 buzzer_pwm(BUZZER_A, BUZZER_FREQUENCY, 100); // Ativa o Buzzer A por 100ms
+                vTaskDelay(pdMS_TO_TICKS(200));              // espera um pequeno intervalo
             }
 
             vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_TIME)); // debounce
